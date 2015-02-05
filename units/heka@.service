@@ -18,7 +18,13 @@ ExecStartPre=-/usr/bin/docker rm %p-%i
 ExecStart=/usr/bin/docker run \
     --name %p-%i \
     -e "SERVICE_ID=%p-%i" \
-    -e "ES_SERVER=elasticsearch-9200.${SKYDNS_DOMAIN}" \
+    -e "ES_SERVER=http://elasticsearch-9200.${SKYDNS_DOMAIN}:9200" \
+    -e "ES_CONNECT_TIMEOUT=3000" \
+    -e "ES_USE_BUFFERING=false" \
+    -e "ES_MAX_BUFFER_SIZE=0"  \
+    -e "ES_BUFFER_FULL_ACTION=drop" \
+    -e "ES_FLUSH_COUNT=50" \
+    -e "ES_FLUSH_INTERVAL=1000" \
     --publish 4352:4352 \
     --publish 8888:8888 \
     ecnahc515/heka:coreos
