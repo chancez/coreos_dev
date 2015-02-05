@@ -1,0 +1,51 @@
+[Unit]
+Description=ElasticSearch service
+After=docker.service
+Requires=docker.service
+
+[Service]
+Restart=always
+TimeoutStartSec=0
+
+EnvironmentFile=/etc/environment
+EnvironmentFile=/etc/skydns.env
+
+ExecStartPre=/usr/bin/mkdir -p /data/elasticsearch
+ExecStartPre=/usr/bin/docker pull ecnahc515/elasticsearch:coreos
+
+ExecStartPre=-/usr/bin/docker kill %p-%i
+ExecStartPre=-/usr/bin/docker rm %p-%i
+
+ExecStart=/bin/bash -c '\
+  echo "curling to test for elasticsearch nodes in etcd"; \
+  curl -f ${COREOS_PRIVATE_IPV4}:4001/v2/keys/skydns/local/skydns/elasticsearch-9300; \
+  if [ "$?" = "0" ]; then \
+     UNICAST_HOSTS=$(etcdctl ls \
+        --recursive \
+        /skydns/local/skydns/elasticsearch-9300 \
+        | sed "s|/skydns/local/skydns/elasticsearch-9300/||" \
+        | sed "s/$/.elasticsearch-9300.${SKYDNS_DOMAIN}:9300/" \
+        | paste -s -d"," -); \
+  else \
+      UNICAST_HOSTS=""; \
+  fi; \
+  echo "\nUNICAST_HOSTS=$UNICAST_HOSTS"; \
+  /usr/bin/docker run \
+    --name %p-%i \
+    --env "SERVICE_ID=%p-%i" \
+    --publish 9200:9200 \
+    --publish 9300:9300 \
+    --volume /data/elasticsearch:/data \
+    ecnahc515/elasticsearch:coreos \
+    /elasticsearch/bin/elasticsearch \
+    --node.name=%p-%i \
+    --cluster.name=%p.${SKYDNS_DOMAIN} \
+    --network.publish_host=${COREOS_PRIVATE_IPV4} \
+    --http.cors.enabled=true \
+    --discovery.zen.ping.multicast.enabled=false \
+    --discovery.zen.ping.unicast.hosts=$UNICAST_HOSTS'
+
+ExecStop=/usr/bin/docker stop %p-%i
+
+[X-Fleet]
+Conflicts=%p@*.service

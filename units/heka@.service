@@ -1,0 +1,29 @@
+[Unit]
+Description=Heka service
+Requires=docker.service
+After=docker.service
+
+[Service]
+Restart=always
+TimeoutStartSec=0
+
+EnvironmentFile=/etc/environment
+EnvironmentFile=/etc/skydns.env
+
+ExecStartPre=/usr/bin/docker pull ecnahc515/heka:coreos
+
+ExecStartPre=-/usr/bin/docker kill %p-%i
+ExecStartPre=-/usr/bin/docker rm %p-%i
+
+ExecStart=/usr/bin/docker run \
+    --name %p-%i \
+    -e "SERVICE_ID=%p-%i" \
+    -e "ES_SERVER=elasticsearch-9200.${SKYDNS_DOMAIN}" \
+    --publish 4352:4352 \
+    --publish 8888:8888 \
+    ecnahc515/heka:coreos
+
+ExecStop=/usr/bin/docker stop %p-%i
+
+[X-Fleet]
+Conflicts=%p@*.service

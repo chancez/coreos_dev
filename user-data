@@ -1,0 +1,126 @@
+#cloud-config
+
+---
+coreos:
+  etcd:
+    discovery: https://discovery.etcd.io/
+    addr: $public_ipv4:4001
+    peer-addr: $public_ipv4:7001
+  fleet:
+    public-ip: $public_ipv4
+  units:
+  - name: etcd.service
+    command: start
+  - name: fleet.service
+    command: start
+  - name: docker-tcp.socket
+    command: start
+    enable: true
+    content: |
+      [Unit]
+      Description=Docker Socket for the API
+
+      [Socket]
+      ListenStream=2375
+      Service=docker.service
+      BindIPv6Only=both
+
+      [Install]
+      WantedBy=sockets.target
+  - name: docker.service
+    drop-ins:
+    - name: 50-networking.conf
+      content: |
+        [Service]
+        Environment="DOCKER_OPTS=--bip=10.0.42.1/24 --dns=10.0.42.1 --dns-search=skydns.dev"
+  - name: skydns.service
+    command: start
+    enable: true
+    content: |
+      [Unit]
+      Description=SkyDNS
+      Documentation=https://github.com/skynetservices/skydns
+      Requires=etcd.service
+      Requires=docker.service
+      After=etcd.service
+      After=docker.service
+
+      [Service]
+      Restart=always
+      RestartSec=5
+
+      TimeoutStartSec=0
+
+      EnvironmentFile=/etc/environment
+      EnvironmentFile=/etc/skydns.env
+      EnvironmentFile=/etc/docker.env
+
+      ExecStartPre=/usr/bin/docker pull ecnahc515/skydns:latest
+
+      ExecStartPre=-/usr/bin/docker kill skydns
+      ExecStartPre=-/usr/bin/docker rm skydns
+
+      ExecStartPre=/usr/bin/etcdctl set /skydns/dev/skydns/hosts/%m '{"host":"${COREOS_PRIVATE_IPV4}"}'
+
+      ExecStart=/usr/bin/docker run \
+          --name skydns \
+          --net host \
+          -e "SKYDNS_DOMAIN=${SKYDNS_DOMAIN}." \
+          -e "SKYDNS_ADDR=${SKYDNS_ADDR}" \
+          -e "SKYDNS_NAMESERVERS=${SKYDNS_NAMESERVERS}" \
+          ecnahc515/skydns:latest \
+              -verbose \
+              -machines ${DOCKER_BRIDGE_IP}:4001 \
+              -local "%m.hosts.${SKYDNS_DOMAIN}" \
+
+      ExecStop=/usr/bin/docker stop skydns
+      ExecStopPost=/usr/bin/etcdctl rm /skydns/dev/skydns/hosts/%m
+  - name: registrator.service
+    command: start
+    enable: true
+    content: |
+      [Unit]
+      Description=Registrator service
+      After=docker.service
+      Requires=docker.service
+      After=skydns.service
+      Requires=skydns.service
+
+      [Service]
+      Restart=always
+      RestartSec=5
+      TimeoutSec=0
+
+      EnvironmentFile=/etc/environment
+      EnvironmentFile=/etc/skydns.env
+      EnvironmentFile=/etc/docker.env
+
+      ExecStartPre=/usr/bin/docker pull progrium/registrator
+
+      ExecStartPre=-/usr/bin/docker kill registrator
+      ExecStartPre=-/usr/bin/docker rm registrator
+
+      ExecStart=/usr/bin/docker run \
+          --name registrator \
+          -v /var/run/docker.sock:/tmp/docker.sock \
+          progrium/registrator \
+          -ip ${COREOS_PUBLIC_IPV4} \
+          skydns2://${DOCKER_BRIDGE_IP}:4001/${SKYDNS_DOMAIN}
+
+      ExecStop=/usr/bin/docker stop registrator
+  - name: systemd-journal-gatewayd.socket
+    command: start
+    enable: true
+write_files:
+- path: /etc/docker.env
+  permissions: 420
+  owner: root
+  content: |
+    DOCKER_BRIDGE_IP=10.0.42.1
+- path: /etc/skydns.env
+  permissions: 420
+  owner: root
+  content: |
+    SKYDNS_DOMAIN=skydns.dev
+    SKYDNS_NAMESERVERS=8.8.8.8:53,8.8.4.4:53
+    SKYDNS_ADDR=0.0.0.0:53
