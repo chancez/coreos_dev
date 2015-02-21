@@ -83,8 +83,8 @@ coreos:
       Description=Registrator service
       After=docker.service
       Requires=docker.service
-      After=skydns.service
-      Requires=skydns.service
+      After=etcd.service
+      Requires=etcd.service
 
       [Service]
       Restart=always

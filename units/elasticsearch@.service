@@ -6,6 +6,7 @@ Requires=docker.service
 [Service]
 Restart=always
 TimeoutStartSec=0
+RestartSec=10
 
 EnvironmentFile=/etc/environment
 EnvironmentFile=/etc/skydns.env
