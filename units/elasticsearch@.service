@@ -19,7 +19,7 @@ ExecStartPre=-/usr/bin/docker rm %p-%i
 
 ExecStart=/bin/bash -c '\
   echo "curling to test for elasticsearch nodes in etcd"; \
-  curl -f ${COREOS_PRIVATE_IPV4}:4001/v2/keys/skydns/dev/skydns/elasticsearch-9300; \
+  curl -f ${COREOS_PRIVATE_IPV4}:2379/v2/keys/skydns/dev/skydns/elasticsearch-9300; \
   if [ "$?" = "0" ]; then \
      UNICAST_HOSTS=$(etcdctl ls \
         --recursive \
