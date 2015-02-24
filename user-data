@@ -95,7 +95,7 @@ coreos:
       EnvironmentFile=/etc/skydns.env
       EnvironmentFile=/etc/docker.env
 
-      ExecStartPre=/usr/bin/docker pull progrium/registrator
+      ExecStartPre=/usr/bin/docker pull gliderlabs/registrator:v4
 
       ExecStartPre=-/usr/bin/docker kill registrator
       ExecStartPre=-/usr/bin/docker rm registrator
@@ -103,7 +103,7 @@ coreos:
       ExecStart=/usr/bin/docker run \
           --name registrator \
           -v /var/run/docker.sock:/tmp/docker.sock \
-          progrium/registrator \
+          gliderlabs/registrator:v4 \
           -ip ${COREOS_PUBLIC_IPV4} \
           skydns2://${DOCKER_BRIDGE_IP}:4001/${SKYDNS_DOMAIN}
 
