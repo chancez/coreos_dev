@@ -50,6 +50,7 @@ coreos:
         --dns=${COREOS_PUBLIC_IPV4} \
         --dns-search=. \
         --name etcd \
+        -e SERVICE_ID=%m \
         -v /opt/etcd:/opt/etcd \
         -v /usr/share/ca-certificates/:/etc/ssl/certs \
         quay.io/coreos/etcd:v2.0.0 \
@@ -69,7 +70,6 @@ coreos:
     command: start
   - name: skydns.service
     command: start
-    enable: true
     content: |
       [Unit]
       Description=SkyDNS
@@ -88,6 +88,7 @@ coreos:
       EnvironmentFile=/etc/environment
       EnvironmentFile=/etc/skydns.env
       EnvironmentFile=/etc/docker.env
+      Environment=ETCDCTL_PEERS=http://127.0.0.1:2379
 
       ExecStartPre=/usr/bin/docker pull ecnahc515/skydns:latest
 
@@ -105,13 +106,11 @@ coreos:
           ecnahc515/skydns:latest \
               -verbose \
               -machines ${DOCKER_BRIDGE_IP}:2379 \
-              -local "%m.hosts.${SKYDNS_DOMAIN}" \
-
+              -local "%m.hosts.${SKYDNS_DOMAIN}"
       ExecStop=/usr/bin/docker stop skydns
       ExecStopPost=/usr/bin/etcdctl rm /skydns/dev/skydns/hosts/%m
   - name: registrator.service
     command: start
-    enable: true
     content: |
       [Unit]
       Description=Registrator service
@@ -139,6 +138,8 @@ coreos:
           -v /var/run/docker.sock:/tmp/docker.sock \
           gliderlabs/registrator:v5 \
           -ip ${COREOS_PUBLIC_IPV4} \
+          -ttl 60 \
+          -ttl-refresh 30 \
           skydns2://${DOCKER_BRIDGE_IP}:2379/${SKYDNS_DOMAIN}
       ExecStop=/usr/bin/docker stop registrator
   - name: systemd-journal-gatewayd.socket
