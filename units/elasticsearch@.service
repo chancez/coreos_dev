@@ -4,9 +4,13 @@ After=docker.service
 Requires=docker.service
 
 [Service]
+Type=notify
+NotifyAccess=all
+
 Restart=always
-TimeoutStartSec=0
 RestartSec=10
+TimeoutStartSec=0
+TimeoutStopSec=15
 
 EnvironmentFile=/etc/environment
 EnvironmentFile=/etc/skydns.env
@@ -14,9 +18,7 @@ Environment=ETCDCTL_PEERS=http://127.0.0.1:2379
 
 ExecStartPre=/usr/bin/mkdir -p /data/elasticsearch
 ExecStartPre=/usr/bin/docker pull ecnahc515/elasticsearch:coreos
-
 ExecStartPre=-/usr/bin/docker kill %p-%i
-ExecStartPre=-/usr/bin/docker rm %p-%i
 
 ExecStart=/bin/bash -c '\
   echo "curling to test for elasticsearch nodes in etcd"; \
@@ -32,9 +34,13 @@ ExecStart=/bin/bash -c '\
       UNICAST_HOSTS=""; \
   fi; \
   echo "\nUNICAST_HOSTS=$UNICAST_HOSTS"; \
-  /usr/bin/docker run \
+  /opt/bin/systemd-docker \
+    --env \
+    --cgroups name=systemd \
+    run \
+    --rm \
     --name %p-%i \
-    --env "SERVICE_ID=%p-%i" \
+    -e "SERVICE_ID=%p-%i" \
     --publish 9200:9200 \
     --publish 9300:9300 \
     --volume /data/elasticsearch:/data \
@@ -46,8 +52,6 @@ ExecStart=/bin/bash -c '\
     --http.cors.enabled=true \
     --discovery.zen.ping.multicast.enabled=false \
     --discovery.zen.ping.unicast.hosts=$UNICAST_HOSTS'
-
-ExecStop=/usr/bin/docker stop %p-%i
 
 [X-Fleet]
 Conflicts=%p@*.service
