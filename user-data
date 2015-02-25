@@ -27,6 +27,20 @@ coreos:
       content: |
         [Service]
         Environment="DOCKER_OPTS=--bip=10.0.42.1/24 --dns=10.0.42.1 --dns-search=skydns.dev"
+  - name: setup-systemd-docker.service
+    command: start
+    content: |
+      [Unit]
+      Description=Setup systemd docker
+      Requires=docker.service
+      After=docker.service
+
+      [Service]
+      Type=oneshot
+      ExecStartPre=-/usr/bin/mkdir -p /opt/bin
+      ExecStart=/usr/bin/curl -L -o /opt/bin/systemd-docker https://github.com/ibuildthecloud/systemd-docker/releases/download/v0.2.0/systemd-docker
+      ExecStart=/usr/bin/chmod +x /opt/bin/systemd-docker
+      RemainAfterExit=yes
   - name: etcd.service
     command: start
     content: |
@@ -43,7 +57,7 @@ coreos:
       SyslogIdentifier=writer_process
       ExecStartPre=-/usr/bin/docker kill etcd
       ExecStartPre=-/usr/bin/docker rm etcd
-      ExecStartPre=/usr/bin/docker pull quay.io/coreos/etcd:v2.0.0
+      ExecStartPre=/usr/bin/docker pull quay.io/coreos/etcd:v2.0.3
       ExecStart=/bin/bash -c "/usr/bin/docker run \
         -p 2379:2379 \
         -p 2380:2380 \
