@@ -147,14 +147,20 @@ coreos:
     enable: true
 write_files:
 - path: /etc/docker.env
-  permissions: 420
+  permissions: 0644
   owner: root
   content: |
     DOCKER_BRIDGE_IP=10.0.42.1
 - path: /etc/skydns.env
-  permissions: 420
+  permissions: 0644
   owner: root
   content: |
     SKYDNS_DOMAIN=skydns.dev
     SKYDNS_NAMESERVERS=8.8.8.8:53,8.8.4.4:53
     SKYDNS_ADDR=0.0.0.0:53
+- path: /home/core/.bashrc
+  permissions: 0600
+  owner: core
+  content: |
+    export FLEETCTL_ENDPOINT=http://127.0.0.1:2379
+    export ETCDCTL_PEERS=http://127.0.0.1:2379
