@@ -1,0 +1,180 @@
+#cloud-config
+
+---
+coreos:
+  fleet:
+    public-ip: $private_ipv4
+    etcd-servers: http://$private_ipv4:2379
+  units:
+  - name: docker-tcp.socket
+    command: start
+    enable: true
+    content: |
+      [Unit]
+      Description=Docker Socket for the API
+
+      [Socket]
+      ListenStream=2375
+      Service=docker.service
+      BindIPv6Only=both
+
+      [Install]
+      WantedBy=sockets.target
+  - name: docker.service
+    command: start
+    drop-ins:
+    - name: 50-networking.conf
+      content: |
+        [Service]
+        Environment="DOCKER_OPTS=--bip=10.0.42.1/24 --dns=10.0.42.1 --dns-search=skydns.dev"
+  - name: setup-systemd-docker.service
+    command: start
+    content: |
+      [Unit]
+      Description=Setup systemd-docker
+      Wants=network-online.target
+      After=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStartPre=-/usr/bin/mkdir -p /opt/bin
+      ExecStart=/usr/bin/curl -L -o /opt/bin/systemd-docker https://github.com/ibuildthecloud/systemd-docker/releases/download/v0.2.0/systemd-docker
+      ExecStart=/usr/bin/chmod +x /opt/bin/systemd-docker
+      RemainAfterExit=yes
+  - name: etcd.service
+    command: start
+    content: |
+      [Unit]
+      Description=etcd 2.0
+      Requires=docker.service
+      After=docker.service
+      Wants=network-online.target
+      After=network-online.target
+
+      [Service]
+      EnvironmentFile=/etc/environment
+      TimeoutStartSec=0
+      SyslogIdentifier=writer_process
+      ExecStartPre=-/usr/bin/docker kill etcd
+      ExecStartPre=-/usr/bin/docker rm etcd
+      ExecStartPre=/usr/bin/docker pull quay.io/coreos/etcd:v2.0.3
+      ExecStart=/bin/bash -c "/usr/bin/docker run \
+        -p 2379:2379 \
+        -p 2380:2380 \
+        --dns=${COREOS_PRIVATE_IPV4} \
+        --dns-search=. \
+        --name etcd \
+        -e SERVICE_IGNORE=true \
+        -v /opt/etcd:/opt/etcd \
+        -v /usr/share/ca-certificates/:/etc/ssl/certs \
+        quay.io/coreos/etcd:v2.0.0 \
+        -data-dir /opt/etcd \
+        -name %H \
+        -listen-client-urls http://0.0.0.0:2379 \
+        -advertise-client-urls http://${COREOS_PRIVATE_IPV4}:2379 \
+        -listen-peer-urls http://0.0.0.0:2380 \
+        -initial-advertise-peer-urls http://${COREOS_PRIVATE_IPV4}:2380 \
+        -initial-cluster ip-10-11-12-100.us-west-2.compute.internal=http://10.11.12.100:2380,ip-10-11-12-101.us-west-2.compute.internal=http://10.11.12.101:2380,ip-10-11-12-102.us-west-2.compute.internal=http://10.11.12.102:2380 \
+        -initial-cluster-state new"
+      ExecStop=/usr/bin/docker kill etcd
+
+      [X-Fleet]
+      Conflicts=etcd*
+  - name: fleet.service
+    command: start
+  - name: skydns.service
+    command: start
+    content: |
+      [Unit]
+      Description=SkyDNS
+      Documentation=https://github.com/skynetservices/skydns
+      Requires=etcd.service
+      Requires=docker.service
+      After=etcd.service
+      After=docker.service
+
+      [Service]
+      Restart=always
+      RestartSec=5
+
+      TimeoutStartSec=0
+
+      EnvironmentFile=/etc/environment
+      EnvironmentFile=/etc/skydns.env
+      EnvironmentFile=/etc/docker.env
+      Environment=ETCDCTL_PEERS=http://127.0.0.1:2379
+
+      ExecStartPre=/usr/bin/docker pull ecnahc515/skydns:latest
+
+      ExecStartPre=-/usr/bin/docker kill skydns
+      ExecStartPre=-/usr/bin/docker rm skydns
+
+      ExecStartPre=/usr/bin/etcdctl set /skydns/dev/skydns/hosts/%m '{"host":"${COREOS_PRIVATE_IPV4}"}'
+
+      ExecStart=/usr/bin/docker run \
+          --name skydns \
+          --net host \
+          -e "SKYDNS_DOMAIN=${SKYDNS_DOMAIN}." \
+          -e "SKYDNS_ADDR=${SKYDNS_ADDR}" \
+          -e "SKYDNS_NAMESERVERS=${SKYDNS_NAMESERVERS}" \
+          ecnahc515/skydns:latest \
+              -verbose \
+              -machines ${DOCKER_BRIDGE_IP}:2379 \
+              -local "%m.hosts.${SKYDNS_DOMAIN}"
+      ExecStop=/usr/bin/docker stop skydns
+      ExecStopPost=/usr/bin/etcdctl rm /skydns/dev/skydns/hosts/%m
+  - name: registrator.service
+    command: start
+    content: |
+      [Unit]
+      Description=Registrator service
+      After=docker.service
+      Requires=docker.service
+      After=etcd.service
+      Requires=etcd.service
+
+      [Service]
+      Restart=always
+      RestartSec=5
+      TimeoutSec=0
+
+      EnvironmentFile=/etc/environment
+      EnvironmentFile=/etc/skydns.env
+      EnvironmentFile=/etc/docker.env
+
+      ExecStartPre=/usr/bin/docker pull gliderlabs/registrator:v5
+
+      ExecStartPre=-/usr/bin/docker kill registrator
+      ExecStartPre=-/usr/bin/docker rm registrator
+
+      ExecStart=/usr/bin/docker run \
+          --name registrator \
+          -v /var/run/docker.sock:/tmp/docker.sock \
+          gliderlabs/registrator:v5 \
+          -ip ${COREOS_PRIVATE_IPV4} \
+          -ttl 60 \
+          -ttl-refresh 30 \
+          skydns2://${DOCKER_BRIDGE_IP}:2379/${SKYDNS_DOMAIN}
+      ExecStop=/usr/bin/docker stop registrator
+  - name: systemd-journal-gatewayd.socket
+    command: start
+    enable: true
+write_files:
+- path: /etc/docker.env
+  permissions: 0644
+  owner: root
+  content: |
+    DOCKER_BRIDGE_IP=10.0.42.1
+- path: /etc/skydns.env
+  permissions: 0644
+  owner: root
+  content: |
+    SKYDNS_DOMAIN=skydns.dev
+    SKYDNS_NAMESERVERS=8.8.8.8:53,8.8.4.4:53
+    SKYDNS_ADDR=0.0.0.0:53
+- path: /home/core/.bashrc
+  permissions: 0600
+  owner: core
+  content: |
+    export FLEETCTL_ENDPOINT=http://127.0.0.1:2379
+    export ETCDCTL_PEERS=http://127.0.0.1:2379
