@@ -1,0 +1,33 @@
+[Unit]
+Description=Logjam log collector service
+
+[Service]
+Restart=always
+TimeoutStartSec=0
+
+User=core
+
+EnvironmentFile=/etc/environment
+EnvironmentFile=/etc/skydns.env
+EnvironmentFile=/etc/docker.env
+
+ExecStartPre=/usr/bin/docker pull quay.io/ecnahc515/logjam:latest
+
+ExecStartPre=-/usr/bin/docker kill %p-%i
+ExecStartPre=-/usr/bin/docker rm -f %p-%i
+
+ExecStart=/usr/bin/docker \
+    run \
+    --rm \
+    --name %p-%i \
+    -e "SERVICE_ID=%p-%i" \
+    -e "LOGJAM_ETCD_SERVERS=http://${DOCKER_BRIDGE_IP}:2379" \
+    -e "LOGJAM_AGGREGATOR=http://heka-8888.${SKYDNS_DOMAIN}:8888" \
+    -e "LOGJAM_MACHINE_ID=%m" \
+    -e "LOGJAM_POLL_INTERVAL=5s" \
+    quay.io/ecnahc515/logjam:latest
+
+ExecStop=/usr/bin/docker stop %p-%i
+
+[X-Fleet]
+Conflicts=%p@*.service
