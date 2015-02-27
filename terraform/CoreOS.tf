@@ -99,6 +99,30 @@ resource "aws_security_group" "coreos" {
         cidr_blocks = ["0.0.0.0/0"]
     }
 
+    # heka
+    ingress {
+        from_port = 4352
+        to_port = 4352
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    # kibana
+    ingress {
+        from_port = 8080
+        to_port = 8080
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
+    # gives kibana access to es
+    ingress {
+        from_port = 9200
+        to_port = 9200
+        protocol = "tcp"
+        cidr_blocks = ["0.0.0.0/0"]
+    }
+
     ingress {
         from_port = -1
         to_port = -1
@@ -107,8 +131,8 @@ resource "aws_security_group" "coreos" {
     }
 
     ingress {
-        from_port = -1
-        to_port = -1
+        from_port = 0
+        to_port = 65535
         protocol = "tcp"
         cidr_blocks = ["${aws_vpc.coreos.cidr_block}"]
     }
@@ -145,5 +169,9 @@ resource "aws_instance" "coreos_host" {
 }
 
 output "addresses" {
-  value = "${join(",",aws_instance.coreos_host.*.public_dns)}"
+    value = "${join(",",aws_instance.coreos_host.*.public_dns)}"
+}
+
+output "etcd-addresses" {
+    value = "${join(":2379,", concat("http://", aws_instance.coreos_host.*.public_dns))}"
 }
