@@ -20,7 +20,7 @@ ExecStart=/bin/bash -c '\
   /usr/bin/docker run \
     --name %p-%i \
     -e "SERVICE_ID=%p-%i" \
-    -e "ES_HOST=${COREOS_PRIVATE_IPV4}" \
+    -e "ES_HOST=${COREOS_PUBLIC_IPV4}" \
     --publish 8080:80 \
     arcus/kibana'
 
