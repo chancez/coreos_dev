@@ -31,9 +31,9 @@ coreos:
     command: start
     content: |
       [Unit]
-      Description=Setup systemd docker
-      Requires=docker.service
-      After=docker.service
+      Description=Setup systemd-docker
+      Wants=network-online.target
+      After=network-online.target
 
       [Service]
       Type=oneshot
