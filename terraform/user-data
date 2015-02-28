@@ -61,8 +61,7 @@ coreos:
       ExecStart=/bin/bash -c "/usr/bin/docker run \
         -p 2379:2379 \
         -p 2380:2380 \
-        --dns=${COREOS_PRIVATE_IPV4} \
-        --dns-search=. \
+        --net host \
         --name etcd \
         -e SERVICE_IGNORE=true \
         -v /opt/etcd:/opt/etcd \
@@ -74,7 +73,10 @@ coreos:
         -advertise-client-urls http://${COREOS_PRIVATE_IPV4}:2379 \
         -listen-peer-urls http://0.0.0.0:2380 \
         -initial-advertise-peer-urls http://${COREOS_PRIVATE_IPV4}:2380 \
-        -initial-cluster ip-10-11-12-100.us-west-2.compute.internal=http://10.11.12.100:2380,ip-10-11-12-101.us-west-2.compute.internal=http://10.11.12.101:2380,ip-10-11-12-102.us-west-2.compute.internal=http://10.11.12.102:2380 \
+        -initial-cluster \
+          ip-10-11-12-100.us-west-2.compute.internal=http://10.11.12.100:2380, \
+          ip-10-11-12-101.us-west-2.compute.internal=http://10.11.12.101:2380, \
+          ip-10-11-12-102.us-west-2.compute.internal=http://10.11.12.102:2380  \
         -initial-cluster-state new"
       ExecStop=/usr/bin/docker kill etcd
 

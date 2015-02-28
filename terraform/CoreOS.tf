@@ -172,6 +172,3 @@ output "addresses" {
     value = "${join(",",aws_instance.coreos_host.*.public_dns)}"
 }
 
-output "etcd-addresses" {
-    value = "${join(":2379,", concat("http://", aws_instance.coreos_host.*.public_dns))}"
-}
